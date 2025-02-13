@@ -106,7 +106,6 @@ def stream_chat_completion(client, messages, user_input):
                             file.flush()  # 刷新文件缓冲区，确保写入到磁盘
                             file.seek(0, os.SEEK_END)  # 确保将文件指针移动到末尾
                             os.fsync(file.fileno())  # 确保文件系统也同步
-                            time.sleep(0.01)  # 添加短暂的延迟
                         elif "</think>" in content:
                             content = content.replace(
                                 "</think>", "\n**End of thinking**\n\n---\n"
@@ -117,7 +116,6 @@ def stream_chat_completion(client, messages, user_input):
                             file.flush()  # 刷新文件缓冲区，确保写入到磁盘
                             file.seek(0, os.SEEK_END)  # 确保将文件指针移动到末尾
                             os.fsync(file.fileno())  # 确保文件系统也同步
-                            time.sleep(0.01)  # 添加短暂的延迟
                         else:
                             print(f"{content}", end="")  # 打印正常回复部分的内容
                             file.write(f"{content}")  # 写入文件
@@ -125,7 +123,6 @@ def stream_chat_completion(client, messages, user_input):
                             file.flush()  # 刷新文件缓冲区，确保写入到磁盘
                             file.seek(0, os.SEEK_END)  # 确保将文件指针移动到末尾
                             os.fsync(file.fileno())  # 确保文件系统也同步
-                            time.sleep(0.01)  # 添加短暂的延迟
 
                     except json.JSONDecodeError:
                         continue
@@ -136,7 +133,7 @@ def stream_chat_completion(client, messages, user_input):
 
 def main():
     with open(file_name, "w", encoding="utf-8") as file:  # 使用 'w' 模式覆盖文件
-        pass  # 覆盖文件内容
+        file.write(f"# DeepSeek Qustion-Answering System\n")  # 写入文件
 
     # 设置SSH隧道转发
     server = SSHTunnelForwarder(
