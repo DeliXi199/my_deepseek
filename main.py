@@ -28,6 +28,7 @@ password = config.get("password")
 local_port = int(config.get("local_port", 8888))
 remote_host = config.get("remote_host")
 remote_port = int(config.get("remote_port", 11434))
+model = config.get("model")
 
 
 def custom_converter(o):
@@ -57,11 +58,40 @@ def get_user_input():
 
 def stream_chat_completion(client, messages):
     """流式获取聊天补全的回复"""
-    response = requests.post(
-        f"http://localhost:{local_port}/v1/chat/completions",
-        json={"messages": messages, "model": "deepseek-r1:70b", "stream": True},
-        stream=True,
-    )
+    try:
+        response = requests.post(
+            f"http://localhost:{local_port}/v1/chat/completions",
+            json={
+                "messages": messages,
+                "model": model,
+                "stream": True,
+            },
+            stream=True,
+        )
+        response.raise_for_status()  # 检查 HTTP 状态码是否为 200
+    except requests.exceptions.RequestException as e:
+        print(f"API 请求失败: {e}")
+        return
+
+    # for line in response.iter_lines():
+    #     if line:
+    #         decoded_line = line.decode("utf-8")
+    #         print(f"Raw Line: {decoded_line}")  # 打印原始行
+    #         if decoded_line.startswith("data: "):
+    #             decoded_line = decoded_line[6:]
+    #             if decoded_line == "[DONE]":
+    #                 print("Stream completed.")  # 打印流完成标志
+    #                 break
+    #             try:
+    #                 data = json.loads(decoded_line)
+    #                 print(f"Parsed Data: {data}")  # 打印解析后的数据
+    #                 content = data["choices"][0]["delta"].get("content", "")
+    #                 print(content, end="", flush=True)
+    #             except json.JSONDecodeError:
+    #                 print("JSON Decode Error")  # 打印 JSON 解析错误
+    #                 continue
+
+    ## 只打印聊天回复，不打印调试信息
     for line in response.iter_lines():
         if line:
             decoded_line = line.decode("utf-8")
@@ -72,7 +102,8 @@ def stream_chat_completion(client, messages):
                 try:
                     data = json.loads(decoded_line)
                     content = data["choices"][0]["delta"].get("content", "")
-                    print(content, end="", flush=True)
+                    if content:  # 只有在内容存在时才输出
+                        print(content, end="", flush=True)
                 except json.JSONDecodeError:
                     continue
     print("\n")  # 打印换行符以确保格式正确
@@ -101,6 +132,7 @@ def main():
             response = requests.get(f"http://localhost:{local_port}/v1/models")
             if response.status_code == 200:
                 print("Port forwarding is working, and DeepSeek API is accessible.")
+                pretty_print("Supported Models", response.json())
             else:
                 print(
                     f"Failed to access DeepSeek API via port forwarding, Status code: {response.status_code}"

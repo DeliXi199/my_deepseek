@@ -2,6 +2,9 @@ import json
 import requests
 from sshtunnel import SSHTunnelForwarder
 from openai import OpenAI
+from datetime import datetime
+import os
+import sys
 
 
 # 读取配置文件并解析
@@ -28,6 +31,11 @@ password = config.get("password")
 local_port = int(config.get("local_port", 8888))
 remote_host = config.get("remote_host")
 remote_port = int(config.get("remote_port", 11434))
+model = config.get("model")
+
+# 获取当前时间并生成文件名
+current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+file_name = f".\\answers\chat_{current_time}.md"
 
 
 def custom_converter(o):
@@ -55,27 +63,33 @@ def get_user_input():
     return user_input if user_input != "" else None
 
 
-def stream_chat_completion(client, messages):
+import time  # 引入time模块
+
+
+def stream_chat_completion(client, messages, user_input):
     """流式获取聊天补全的回复，并将内容写入md文件"""
     response = requests.post(
         f"http://localhost:{local_port}/v1/chat/completions",
-        json={"messages": messages, "model": "deepseek-r1:70b", "stream": True},
+        json={"messages": messages, "model": model, "stream": True},
         stream=True,
     )
-    is_think = True
-    think_content = ""  # 用来积累 think 部分的内容
-    normal_content = ""  # 用来积累正常回复部分的内容
-
-    # 打开文件进行写入
-    with open("output.md", "a", encoding="utf-8") as file:
+    # 打开文件进行写入（追加内容）
+    with open(file_name, "a", encoding="utf-8") as file:  # 使用 'a' 模式追加内容
+        file.write(f"## **DeliXi:** \n")
+        file.write(f"{user_input}\n")
+        file.write("## **DeepSeek:** \n")
         for line in response.iter_lines():
             if line:
                 decoded_line = line.decode("utf-8")
                 if decoded_line.startswith("data: "):
                     decoded_line = decoded_line[6:]
                     if decoded_line == "[DONE]":
-                        print(f"{normal_content}\n")
-                        file.write(f"{normal_content}\n\n")  # 结束对话，插入一个空行
+                        print(f"\n")
+                        file.write(f"\n\n")  # 结束对话，插入一个空行
+                        sys.stdout.flush()  # 强制刷新标准输出缓冲区
+                        file.flush()  # 刷新文件缓冲区，确保写入到磁盘
+                        file.seek(0, os.SEEK_END)  # 确保将文件指针移动到末尾
+                        os.fsync(file.fileno())  # 确保文件系统也同步
                         break
                     try:
                         data = json.loads(decoded_line)
@@ -83,40 +97,35 @@ def stream_chat_completion(client, messages):
 
                         # 处理 <think> 和 </think> 的部分
                         if "<think>" in content:
-                            is_think = True
-                            think_content += content.replace(
-                                "<think>",
-                                "<details>\n<summary>**Thinking...**</summary>",
+                            content = content.replace(
+                                "<think>", "**Thinking...**\n"
                             )  # 开始积累 think 部分内容
-                            print(f"{think_content}")  # 打印积累的 think 部分内容
-                            file.write(f"{think_content}")  # 写入文件，
-                            think_content = ""  # 清空积累 think 部分的内容
-                        if is_think:
-                            if "\n" in content:
-                                None  # 忽略换行
-                            else:
-                                think_content += content  # 继续积累 think 部分的内容
+                            print(f"{content}", end="")  # 打印积累的 think 部分内容
+                            file.write(f"{content}")  # 写入文件
+                            sys.stdout.flush()  # 强制刷新标准输出缓冲区
+                            file.flush()  # 刷新文件缓冲区，确保写入到磁盘
+                            file.seek(0, os.SEEK_END)  # 确保将文件指针移动到末尾
+                            os.fsync(file.fileno())  # 确保文件系统也同步
+                            time.sleep(0.01)  # 添加短暂的延迟
+                        elif "</think>" in content:
+                            content = content.replace(
+                                "</think>", "\n**End of thinking**\n\n---\n"
+                            )
+                            print(f"{content}", end="")  # 打印积累的 think 部分内容
+                            file.write(f"{content}")  # 写入文件
+                            sys.stdout.flush()  # 强制刷新标准输出缓冲区
+                            file.flush()  # 刷新文件缓冲区，确保写入到磁盘
+                            file.seek(0, os.SEEK_END)  # 确保将文件指针移动到末尾
+                            os.fsync(file.fileno())  # 确保文件系统也同步
+                            time.sleep(0.01)  # 添加短暂的延迟
                         else:
-                            if "\n" in content:
-                                None  # 忽略换行
-                            else:
-                                normal_content += content  # 继续积累正常回复部分的内容
-                        if "</think>" in content:
-                            is_think = False
-                            think_content += content.replace(
-                                "</think>", "</details>"
-                            )  # 结束积累 think 部分内容，插入 HTML 标签
-                            print(f"{think_content}")  # 打印积累的 think 部分内容
-                            file.write(f"{think_content}")  # 写入文件，
-                            think_content = ""  # 清空积累 think 部分的内容
-                        if "\n" in content and is_think:
-                            print(f"{think_content}")  # 打印积累的 think 部分内容
-                            file.write(f"{think_content}")  # 写入文件
-                            think_content = ""  # 清空积累 think 部分的内容
-                        if "\n" in content and not is_think:
-                            print(f"{normal_content}")
-                            file.write(f"{normal_content}")  # 结束对话，插入一个空行
-                            normal_content = ""  # 清空积累正常回复部分的内容
+                            print(f"{content}", end="")  # 打印正常回复部分的内容
+                            file.write(f"{content}")  # 写入文件
+                            sys.stdout.flush()  # 强制刷新标准输出缓冲区
+                            file.flush()  # 刷新文件缓冲区，确保写入到磁盘
+                            file.seek(0, os.SEEK_END)  # 确保将文件指针移动到末尾
+                            os.fsync(file.fileno())  # 确保文件系统也同步
+                            time.sleep(0.01)  # 添加短暂的延迟
 
                     except json.JSONDecodeError:
                         continue
@@ -126,6 +135,9 @@ def stream_chat_completion(client, messages):
 
 
 def main():
+    with open(file_name, "w", encoding="utf-8") as file:  # 使用 'w' 模式覆盖文件
+        pass  # 覆盖文件内容
+
     # 设置SSH隧道转发
     server = SSHTunnelForwarder(
         (hostname, port),
@@ -176,7 +188,7 @@ def main():
 
             # 发送聊天补全请求
             print(f"Thinking...\n{'='*10} DeepSeek 回复 {'='*10}\n")
-            stream_chat_completion(client, messages)
+            stream_chat_completion(client, messages, user_input)
             print(f"{'='*30}\n")
 
             # 添加DeepSeek的回复到消息列表中（已经在stream_chat_completion中处理）

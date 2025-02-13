@@ -23,7 +23,7 @@ try:
     # 本地端口
     local_port = 8888
     # 目标节点的 IP 地址和端口
-    remote_host = "172.16.8.24"
+    remote_host = "172.16.8.22"
     remote_port = 11434
 
     # 设置端口转发
